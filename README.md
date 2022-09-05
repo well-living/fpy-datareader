@@ -7,6 +7,11 @@
 https://www.e-stat.go.jp/api/api-info/e-stat-manual3-0
 
 ### e-StatAPIで統計データ取得
+
+```bash
+pip install fpy-datareader
+```
+
 ```Python
 import fpy_datareader as fdr
 
