@@ -364,8 +364,11 @@ def interpolate_age_income(
     
     return result_df
 
-def create_age_income_dataframe_with_midpoint(age_data: pd.Series, income_data: pd.Series, 
-                                             age_column_name: str) -> pd.DataFrame:
+
+def create_age_income_dataframe_with_midpoint(
+        age_data: pd.Series, 
+        income_data: pd.Series, 
+    ) -> pd.DataFrame:
     """
     年齢階級と収入データから年齢中央値を使ったage, income形式のDataFrameを作成
     Create DataFrame with age midpoints and income columns from age class and income data
@@ -376,8 +379,6 @@ def create_age_income_dataframe_with_midpoint(age_data: pd.Series, income_data: 
         Series containing age class strings (e.g., "30～34歳", "35～39歳")
     income_data : pd.Series
         Series containing income values
-    age_column_name : str
-        Name of the age class column for processing
     
     Returns
     -------
@@ -388,77 +389,22 @@ def create_age_income_dataframe_with_midpoint(age_data: pd.Series, income_data: 
     """
     # 一時的なDataFrameを作成
     temp_df = pd.DataFrame({
-        age_column_name: age_data,
+        'age': age_data,
         'income': income_data
     })
     
     # 既存の関数を使用して年齢中央値を追加
-    return add_age_midpoint_column(temp_df, age_column_name, 'income', method='continuous')
-
-
-def process_to_interpolated_table(age_income_df: pd.DataFrame, 
-                                start_age: int = 15, 
-                                end_age: int = 80,
-                                method: str = 'linear',
-                                extrapolation: str = 'terminal',
-                                terminal_start: int = 0,
-                                terminal_end: int = 100,
-                                include_growth_rate: bool = True,
-                                include_growth_ma: bool = True,
-                                growth_ma_periods: int = 3) -> pd.DataFrame:
-    """
-    age, income形式のDataFrameを補間テーブルに変換
-    Convert age-income DataFrame to interpolated table
-    
-    Parameters
-    ----------
-    age_income_df : pd.DataFrame
-        DataFrame with columns ['age', 'income']
-    start_age : int, default 15
-        Starting age for interpolation
-    end_age : int, default 80
-        Ending age for interpolation
-    method : str, default 'linear'
-        Interpolation method: 'linear' or 'cubic_spline'
-    extrapolation : str, default 'constant'
-        Extrapolation method: 'constant' or 'terminal'
-    terminal_start : int, default 0
-        Starting age for terminal point (when extrapolation='terminal')
-    terminal_end : int, default 100
-        Ending age for terminal point (when extrapolation='terminal')
-    include_growth_rate : bool, default True
-        Whether to include growth rate column
-    include_growth_ma : bool, default True
-        Whether to include growth rate moving average column
-    growth_ma_periods : int, default 3
-        Number of periods for moving average calculation
-    
-    Returns
-    -------
-    pd.DataFrame
-        Interpolated DataFrame with columns:
-        - 'age': Integer ages from start_age to end_age
-        - 'income': Interpolated income values
-        - 'growth_rate': Year-over-year growth rate (if include_growth_rate=True)
-        - 'growth_rate_ma': Moving average of growth rate (if include_growth_ma=True)
-    """
-    return interpolate_age_income(
-        age_income_df,
-        start_age=start_age,
-        end_age=end_age,
-        method=method,
-        extrapolation=extrapolation,
-        terminal_start=terminal_start,
-        terminal_end=terminal_end,
-        include_growth_rate=include_growth_rate,
-        include_growth_ma=include_growth_ma,
-        growth_ma_periods=growth_ma_periods
-    )
+    return add_age_midpoint_column(temp_df, 'age', 'income', method='continuous')
 
 
 # 家計調査データ変換関数群
-def get_family_income_expenditure_survey_data(api_key: str, cat01_code: str, value_name: str,
-                                             stats_data_id: str = "0002070011", yyyy: int = 2024) -> pd.DataFrame:
+def get_family_income_expenditure_survey_data(
+        api_key: str,
+        cat01_code: str, 
+        value_name: str,
+        stats_data_id: str = "0002070011", 
+        yyyy: int = 2024
+    ) -> pd.DataFrame:
     """
     家計調査データを取得
     二人以上の世帯 年次
@@ -501,18 +447,20 @@ def get_family_income_expenditure_survey_data(api_key: str, cat01_code: str, val
     df = value.loc[~value["世帯主の年齢階級"].isin(["平均", "65歳以上"]), cols]
     return df.rename(columns={"値": value_name})
 
-
-def process_family_income_expenditure_survey_data(api_key: str, stats_data_id: str = "0002070011", 
-                                                  yyyy: int = 2024,
-                                                  start_age: int = 15,
-                                                  end_age: int = 80,
-                                                  method: str = 'linear',
-                                                  extrapolation: str = 'terminal',
-                                                  terminal_start: int = 0,
-                                                  terminal_end: int = 100,
-                                                  include_growth_rate: bool = True,
-                                                  include_growth_ma: bool = True,
-                                                  growth_ma_periods: int = 3) -> pd.DataFrame:
+def process_family_income_expenditure_survey_data(
+        api_key: str, 
+        stats_data_id: str = "0002070011", 
+        yyyy: int = 2024,
+        start_age: int = 15,
+        end_age: int = 80,
+        method: str = 'linear',
+        extrapolation: str = 'terminal',
+        terminal_start: int = 0,
+        terminal_end: int = 100,
+        include_growth_rate: bool = True,
+        include_growth_ma: bool = True,
+        growth_ma_periods: int = 3
+    ) -> pd.DataFrame:
     """
     家計調査データの処理
     Process Family Income and Expenditure Survey data
@@ -580,8 +528,12 @@ def process_family_income_expenditure_survey_data(api_key: str, stats_data_id: s
 
 
 # 全国家計構造調査データ変換関数群
-def get_family_income_consumption_wealth_survey_data(api_key: str, cat04_code: str, name: str,
-                                                    stats_data_id: str = '0003424621') -> pd.DataFrame:
+def get_family_income_consumption_wealth_survey_data(
+        api_key: str, 
+        cat04_code: str, 
+        value_name: str,
+        stats_data_id: str = '0003424621'
+    ) -> pd.DataFrame:
     """
     全国家計構造調査データを取得
     Retrieve National Survey of Family Income, Consumption and Wealth data
@@ -593,7 +545,7 @@ def get_family_income_consumption_wealth_survey_data(api_key: str, cat04_code: s
         e-Stat API key for accessing Japanese government statistics
     cat04_code : str
         Category 04 code for data filtering
-    name : str
+    value_name : str
         Name for the value column in returned DataFrame
     stats_data_id : str
         Statistics data ID (e.g., '0003424621')
@@ -620,19 +572,21 @@ def get_family_income_consumption_wealth_survey_data(api_key: str, cat04_code: s
     # 5歳階級のデータのみを抽出 (Extract only 5-year age class data)
     cond = value["世帯主の年齢階級32区分"].str.contains("５歳階級")
     df = value.loc[cond, ["世帯主の年齢階級32区分", "値"]]
-    return df.rename(columns={"値": name})
+    return df.rename(columns={"値": value_name})
 
-
-def process_family_income_consumption_wealth_survey_data(api_key: str, stats_data_id: str, 
-                                                        start_age: int = 15,
-                                                        end_age: int = 80,
-                                                        method: str = 'linear',
-                                                        extrapolation: str = 'terminal',
-                                                        terminal_start: int = 0,
-                                                        terminal_end: int = 100,
-                                                        include_growth_rate: bool = True,
-                                                        include_growth_ma: bool = True,
-                                                        growth_ma_periods: int = 3) -> pd.DataFrame:
+def process_family_income_consumption_wealth_survey_data(
+        api_key: str, 
+        stats_data_id: str = "0003424621", 
+        start_age: int = 15,
+        end_age: int = 80,
+        method: str = 'linear',
+        extrapolation: str = 'terminal',
+        terminal_start: int = 0,
+        terminal_end: int = 100,
+        include_growth_rate: bool = True,
+        include_growth_ma: bool = True,
+        growth_ma_periods: int = 3
+    ) -> pd.DataFrame:
     """
     全国家計構造調査データの処理
     Process National Survey of Family Income, Consumption and Wealth data
@@ -676,15 +630,15 @@ def process_family_income_consumption_wealth_survey_data(api_key: str, stats_dat
     # 可処分所得データの取得 (Get disposable income data)
     income_df = get_family_income_consumption_wealth_survey_data(api_key, "4", "可処分所得", stats_data_id)
     
-    # age, income形式のDataFrameを作成（既存関数を活用）
-    age_income_df = create_age_income_dataframe_with_midpoint(  # 年齢の列がないため、中央値補完が必要
+    # age, income形式のDataFrameを作成
+    # 年齢の列がないため、中央値補完が必要
+    age_income_df = create_age_income_dataframe_with_midpoint( 
         income_df["世帯主の年齢階級32区分"],
         income_df["可処分所得"],
-        "世帯主の年齢階級32区分"
     )
     
     # 補間処理（既存関数を活用）
-    return process_to_interpolated_table(
+    return interpolate_age_income(
         age_income_df,
         start_age=start_age,
         end_age=end_age,
@@ -699,10 +653,18 @@ def process_family_income_consumption_wealth_survey_data(api_key: str, stats_dat
 
 
 # 賃金構造基本調査データ変換関数群
-def get_wage_structure_survey_data_by_tab(api_key: str, name: str, cd_tab: str,
-                                         stats_data_id: str = "0003425893",
-                                         cd_cat01: str = "01", cd_cat02: str = "01", cd_cat03: str = "01",
-                                         cd_cat05: str = "01", cd_cat06: str = "01", yyyy: int = 2023) -> pd.DataFrame:
+def get_wage_structure_survey_data_by_tab(
+        api_key: str, 
+        value_name: str, 
+        cd_tab: str,
+        stats_data_id: str = "0003425893",
+        cd_cat01: str = "01", 
+        cd_cat02: str = "01", 
+        cd_cat03: str = "01",
+        cd_cat05: str = "01", 
+        cd_cat06: str = "01", 
+        yyyy: int = 2023
+    ) -> pd.DataFrame:
     """
     賃金構造基本調査データを取得
     Retrieve Basic Survey on Wage Structure data
@@ -711,7 +673,7 @@ def get_wage_structure_survey_data_by_tab(api_key: str, name: str, cd_tab: str,
     ----------
     api_key : str
         e-Stat API key for accessing Japanese government statistics
-    name : str
+    value_name : str
         Name for the value column in returned DataFrame
     cd_tab : str
         Table category code (e.g., '33' for age, '40' for monthly salary, '44' for bonus)
@@ -754,19 +716,22 @@ def get_wage_structure_survey_data_by_tab(api_key: str, name: str, cd_tab: str,
     
     # 年齢計以外のデータを抽出 (Extract data excluding age total)
     df = value.loc[~value["年齢階級_基本"].isin(["年齢計"]), ['年齢階級_基本', '値']]
-    return df.rename(columns={"値": name})
+    return df.rename(columns={"値": value_name})
 
-
-def process_wage_structure_survey_data(api_key: str, stats_data_id: str, yyyy: int = 2023,
-                                      start_age: int = 15,
-                                      end_age: int = 80,
-                                      method: str = 'linear',
-                                      extrapolation: str = 'terminal',
-                                      terminal_start: int = 0,
-                                      terminal_end: int = 100,
-                                      include_growth_rate: bool = True,
-                                      include_growth_ma: bool = True,
-                                      growth_ma_periods: int = 3) -> pd.DataFrame:
+def process_wage_structure_survey_data(
+        api_key: str, 
+        stats_data_id: str = '0003425893', 
+        yyyy: int = 2023,
+        start_age: int = 15,
+        end_age: int = 80,
+        method: str = 'linear',
+        extrapolation: str = 'terminal',
+        terminal_start: int = 0,
+        terminal_end: int = 100,
+        include_growth_rate: bool = True,
+        include_growth_ma: bool = True,
+        growth_ma_periods: int = 3
+    ) -> pd.DataFrame:
     """
     賃金構造基本調査データの処理
     Process Basic Survey on Wage Structure data
@@ -826,7 +791,7 @@ def process_wage_structure_survey_data(api_key: str, stats_data_id: str, yyyy: i
     })
     
     # 補間処理（既存関数を活用）
-    return process_to_interpolated_table(
+    return interpolate_age_income(
         age_income_df,
         start_age=start_age,
         end_age=end_age,
@@ -841,10 +806,16 @@ def process_wage_structure_survey_data(api_key: str, stats_data_id: str, yyyy: i
 
 
 # 賃金構造基本調査（都道府県別）データ変換関数群
-def get_wage_structure_survey_data_by_prefecture(api_key: str, name: str, cd_tab: str,
-                                               stats_data_id: str = "0003426933",
-                                               cd_cat03: str = "01", cd_cat04: str = "01", 
-                                               area: str = "13000", yyyy: int = 2023) -> pd.DataFrame:
+def get_wage_structure_survey_data_by_prefecture(
+        api_key: str, 
+        value_name: str, 
+        cd_tab: str,
+        stats_data_id: str = "0003426933",
+        cd_cat03: str = "01", 
+        cd_cat04: str = "01", 
+        area: str = "13000", 
+        yyyy: int = 2023
+    ) -> pd.DataFrame:
     """
     賃金構造基本調査（都道府県別）データを取得
     Retrieve Basic Survey on Wage Structure data by prefecture
@@ -853,7 +824,7 @@ def get_wage_structure_survey_data_by_prefecture(api_key: str, name: str, cd_tab
     ----------
     api_key : str
         e-Stat API key for accessing Japanese government statistics
-    name : str
+    value_name : str
         Name for the value column in returned DataFrame
     cd_tab : str
         Table category code (e.g., '33' for age, '40' for monthly salary, '44' for bonus)
@@ -891,20 +862,24 @@ def get_wage_structure_survey_data_by_prefecture(api_key: str, name: str, cd_tab
     
     # 年齢計以外のデータを抽出 (Extract data excluding age total)
     df = value.loc[~value["年齢階級_基本"].isin(["年齢計"]), ['年齢階級_基本', '値']]
-    return df.rename(columns={"値": name})
+    return df.rename(columns={"値": value_name})
 
 
-def process_wage_structure_survey_data_by_prefecture(api_key: str, stats_data_id: str, area: str = "13000", 
-                                                   yyyy: int = 2023,
-                                                   start_age: int = 15,
-                                                   end_age: int = 80,
-                                                   method: str = 'linear',
-                                                   extrapolation: str = 'terminal',
-                                                   terminal_start: int = 0,
-                                                   terminal_end: int = 100,
-                                                   include_growth_rate: bool = True,
-                                                   include_growth_ma: bool = True,
-                                                   growth_ma_periods: int = 3) -> pd.DataFrame:
+def process_wage_structure_survey_data_by_prefecture(
+        api_key: str, 
+        stats_data_id: str = "0003426933",
+        area: str = "13000", 
+        yyyy: int = 2023,
+        start_age: int = 15,
+        end_age: int = 80,
+        method: str = 'linear',
+        extrapolation: str = 'terminal',
+        terminal_start: int = 0,
+        terminal_end: int = 100,
+        include_growth_rate: bool = True,
+        include_growth_ma: bool = True,
+        growth_ma_periods: int = 3
+    ) -> pd.DataFrame:
     """
     賃金構造基本調査（都道府県別）データの処理
     Process Basic Survey on Wage Structure data by prefecture
@@ -949,7 +924,7 @@ def process_wage_structure_survey_data_by_prefecture(api_key: str, stats_data_id
         - 'growth_rate_ma': 3-period moving average of growth rate
     """
     # 年齢、月給、賞与データの取得 (Get age, monthly salary, and bonus data)
-    age_df = get_wage_structure_survey_data_by_prefecture(api_key, "年齢", "33", stats_data_id, area=area, yyyy=yyyy)
+    age_df = get_wage_structure_survey_data_by_prefecture(api_key, "age", "33", stats_data_id, area=area, yyyy=yyyy)
     salary_df = get_wage_structure_survey_data_by_prefecture(api_key, "salary", "40", stats_data_id, area=area, yyyy=yyyy)
     bonus_df = get_wage_structure_survey_data_by_prefecture(api_key, "bonus", "44", stats_data_id, area=area, yyyy=yyyy)
     
@@ -961,12 +936,12 @@ def process_wage_structure_survey_data_by_prefecture(api_key: str, stats_data_id
     # age, income形式のDataFrameを作成
     # Create age-income DataFrame (actual age values, not age classes)
     age_income_df = pd.DataFrame({
-        'age': combined_df["年齢"],
+        'age': combined_df["age"],
         'income': combined_df["income"]
     })
     
     # 補間処理（既存関数を活用）
-    return process_to_interpolated_table(
+    return interpolate_age_income(
         age_income_df,
         start_age=start_age,
         end_age=end_age,
@@ -981,9 +956,13 @@ def process_wage_structure_survey_data_by_prefecture(api_key: str, stats_data_id
 
 
 # 国民生活基礎調査データ変換関数群
-def get_living_conditions_survey_data(api_key: str, name: str,
-                                     stats_data_id: str = "0004021242", cd_tab: str = "10",
-                                     cd_cat02: str = "038") -> pd.DataFrame:
+def get_living_conditions_survey_data(
+        api_key: str, 
+        value_name: str,
+        stats_data_id: str = "0004021242", 
+        cd_tab: str = "10",
+        cd_cat02: str = "038"
+    ) -> pd.DataFrame:
     """
     国民生活基礎調査データを取得
     Retrieve Comprehensive Survey of Living Conditions data
@@ -992,7 +971,7 @@ def get_living_conditions_survey_data(api_key: str, name: str,
     ----------
     api_key : str
         e-Stat API key for accessing Japanese government statistics
-    name : str
+    value_name : str
         Name for the value column in returned DataFrame
     stats_data_id : str
         Statistics data ID (e.g., '0004021242')
@@ -1021,19 +1000,22 @@ def get_living_conditions_survey_data(api_key: str, name: str,
     # 総数、再掲以外のデータを抽出 (Extract data excluding totals and sub-totals)
     cond = ~value["世帯主の年齢（１０歳階級）_102"].str.contains("総数|再掲")
     df = value.loc[cond, ['世帯主の年齢（１０歳階級）_102', '値']]
-    return df.rename(columns={"値": name})
+    return df.rename(columns={"値": value_name})
 
 
-def process_living_conditions_survey_data(api_key: str, stats_data_id: str, 
-                                         start_age: int = 15,
-                                         end_age: int = 80,
-                                         method: str = 'linear',
-                                         extrapolation: str = 'terminal',
-                                         terminal_start: int = 0,
-                                         terminal_end: int = 100,
-                                         include_growth_rate: bool = True,
-                                         include_growth_ma: bool = True,
-                                         growth_ma_periods: int = 3) -> pd.DataFrame:
+def process_living_conditions_survey_data(
+        api_key: str, 
+        stats_data_id: str = "0004021242", 
+        start_age: int = 15,
+        end_age: int = 80,
+        method: str = 'linear',
+        extrapolation: str = 'terminal',
+        terminal_start: int = 0,
+        terminal_end: int = 100,
+        include_growth_rate: bool = True,
+        include_growth_ma: bool = True,
+        growth_ma_periods: int = 3
+    ) -> pd.DataFrame:
     """
     国民生活基礎調査データの処理
     Process Comprehensive Survey of Living Conditions data
@@ -1086,7 +1068,7 @@ def process_living_conditions_survey_data(api_key: str, stats_data_id: str,
     )
     
     # 補間処理（既存関数を活用）
-    return process_to_interpolated_table(
+    return interpolate_age_income(
         age_income_df,
         start_age=start_age,
         end_age=end_age,
