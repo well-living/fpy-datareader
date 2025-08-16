@@ -10,7 +10,9 @@ def interpolate_age_income(
         extrapolation='constant', 
         terminal_start=0, 
         terminal_end=100,
-        include_growth_rate=False
+        include_growth_rate=False,
+        include_growth_ma=False,
+        growth_ma_periods=3
     ):
     """
     年齢別所得データを1歳刻みで補間するテーブルに変換する関数
@@ -33,12 +35,17 @@ def interpolate_age_income(
         ターミナル時点の終了年齢（extrapolation='terminal'の場合）
     include_growth_rate : bool, default False
         成長率の列を追加するかどうか
+    include_growth_ma : bool, default False
+        成長率の移動平均列を追加するかどうか（include_growth_rate=Trueの場合のみ有効）
+    growth_ma_periods : int, default 3
+        移動平均の期間数
     
     Returns
     -------
     pandas.DataFrame
         年齢と所得の補間されたテーブル
         include_growth_rate=Trueの場合、成長率の列も追加される
+        include_growth_ma=Trueの場合、成長率の移動平均列も追加される
         
     Examples
     --------
@@ -81,6 +88,20 @@ def interpolate_age_income(
         7   35  520331.311475     0.011866
         8   36  526531.639344     0.011765
         9   37  532731.967213     0.011664
+        
+    >>> # 成長率と移動平均付きの例
+    >>> result_with_ma = interpolate_age_income(data, 28, 35, include_growth_rate=True, 
+    ...                                        include_growth_ma=True, growth_ma_periods=3)
+    >>> print(result_with_ma)
+           age         income  growth_rate  growth_rate_ma
+        0   28  495530.000000     0.000000        0.000000
+        1   29  495530.000000     0.000000        0.000000
+        2   30  495530.000000     0.000000        0.004172
+        3   31  495530.000000     0.012516        0.008289
+        4   32  501730.327869     0.012353        0.008353
+        5   33  507930.655738     0.012191        0.012353
+        6   34  514130.983607     0.012028        0.012191
+        7   35  520331.311475     0.011866        0.012028
         
     Notes
     -----
@@ -162,5 +183,36 @@ def interpolate_age_income(
         # pct_changeを使用して前年比成長率を計算（浮動小数点数形式）
         growth_rate = result_df['income'].pct_change().shift(-1)
         result_df['growth_rate'] = growth_rate
+        
+        # 移動平均の計算と追加
+        if include_growth_ma:
+            # 各時点での移動平均を計算
+            growth_ma_values = []
+            
+            for i in range(len(result_df)):
+                # 現在の時点を中心とした期間を計算
+                # 例：3期間の場合、29歳なら28,29,30歳（i-1, i, i+1）
+                center_offset = (growth_ma_periods - 1) // 2
+                start_idx = max(0, i - center_offset)
+                end_idx = min(len(result_df), i + growth_ma_periods - center_offset)
+                
+                # 初期時点の場合は利用可能なデータから期間分を取得
+                if i < center_offset:
+                    start_idx = 0
+                    end_idx = min(len(result_df), growth_ma_periods)
+                
+                # 利用可能な成長率データを取得（NaNを除外）
+                available_growth = result_df['growth_rate'].iloc[start_idx:end_idx]
+                valid_growth = available_growth.dropna()
+                
+                # 有効なデータがある場合は平均を計算、なければNaN
+                if len(valid_growth) > 0:
+                    ma_value = valid_growth.mean()
+                else:
+                    ma_value = np.nan
+                
+                growth_ma_values.append(ma_value)
+            
+            result_df['growth_rate_ma'] = growth_ma_values
     
     return result_df
