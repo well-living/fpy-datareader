@@ -1,3 +1,4 @@
+# fpy_datareader/future_income_estimator.py
 import numpy as np
 import pandas as pd
 from scipy.interpolate import CubicSpline
@@ -363,6 +364,159 @@ def interpolate_age_income(
             result_df['growth_rate_ma'] = growth_ma_values
     
     return result_df
+
+def add_income_multiplier_columns(df, rate_column='growth_rate', add_cumsum=True, start_age=None, end_age=None):
+    """
+    データフレームにincome_multiplier列とその累積和列を追加する関数（開始・終了年齢指定可能）
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        元のデータフレーム（age, income, growth_rate, growth_rate_ma列を含む）
+    rate_column : str
+        使用する成長率の列名 ('growth_rate' または 'growth_rate_ma')
+    add_cumsum : bool
+        累積和列を追加するかどうか (デフォルト: True)
+    start_age : int or None
+        開始年齢（この年齢を1とする）。Noneの場合は最初の年齢を使用
+    end_age : int or None
+        終了年齢（この年齢以降は0とする）。Noneの場合は制限なし
+        
+    Returns:
+    --------
+    pandas.DataFrame
+        income_multiplier列と（add_cumsum=Trueの場合）income_multiplier_cumsum列が追加されたデータフレーム
+    """
+    
+    # データフレームをコピーして元データを保持
+    result_df = df.copy()
+    
+    # 指定された列が存在するかチェック
+    if rate_column not in result_df.columns:
+        raise ValueError(f"指定された列 '{rate_column}' が見つかりません。利用可能な列: {list(result_df.columns)}")
+    
+    # 年齢でソートして確実に順序を保つ
+    result_df = result_df.sort_values('age').reset_index(drop=True)
+    
+    # 開始年齢の設定（指定がない場合は最初の年齢）
+    if start_age is None:
+        start_age = result_df['age'].iloc[0]
+    
+    # 開始年齢が存在するかチェック
+    if start_age not in result_df['age'].values:
+        raise ValueError(f"指定された開始年齢 {start_age} がデータに存在しません")
+    
+    if end_age is not None:
+        print(f"終了年齢: {end_age}歳（以降は0）")
+    
+    # income_multiplier列を計算
+    multipliers = []
+    multiplier = 0.0  # 開始年齢以前は0
+    start_index = result_df[result_df['age'] == start_age].index[0]
+    
+    for i in range(len(result_df)):
+        current_age = result_df['age'].iloc[i]
+        
+        if current_age < start_age:
+            # 開始年齢以前は0
+            multipliers.append(0.0)
+        elif current_age == start_age:
+            # 開始年齢時点は1
+            multiplier = 1.0
+            multipliers.append(1.0)
+        elif end_age is not None and current_age > end_age:
+            # 終了年齢以降は0
+            multipliers.append(0.0)
+        else:
+            # 開始年齢以降、終了年齢以前（または終了年齢指定なし）
+            previous_rate = result_df[rate_column].iloc[i-1]
+            if pd.notna(previous_rate):  # NaNでない場合のみ適用
+                multiplier = multiplier * (1 + previous_rate)
+            # NaNの場合は前の値を維持
+            multipliers.append(multiplier)
+    
+    # 計算結果をデータフレームに追加
+    result_df['income_multiplier'] = multipliers
+    
+    # 累積和列を追加（オプション）
+    if add_cumsum:
+        result_df['income_multiplier_cumsum'] = result_df['income_multiplier'].cumsum()
+    
+    return result_df
+
+def sum_income_multiplier(df):
+    """
+    income_multiplier列の合計を計算する関数
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        income_multiplier列を含むデータフレーム
+        
+    Returns:
+    --------
+    float
+        income_multiplier列の合計値
+    """
+    if 'income_multiplier' not in df.columns:
+        raise ValueError("データフレームにincome_multiplier列が見つかりません")
+    
+    return df['income_multiplier'].sum()
+
+def calculate_lifetime_income(df, rate_column='growth_rate', current_age=None, current_income=None, retirement_age=None):
+    """
+    特定年齢・収入の人の生涯合計年収を計算する関数
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        年齢別の成長率データを含むデータフレーム
+    rate_column : str
+        使用する成長率の列名 ('growth_rate' または 'growth_rate_ma')
+    current_age : int or None
+        現在の年齢
+    current_income : float or None
+        現在の年収
+    retirement_age : int or None
+        退職年齢（この年齢以降は収入0）。Noneの場合は制限なし
+        
+    Returns:
+    --------
+    float
+        生涯合計年収
+    """
+    
+    if current_age is None:
+        raise ValueError("current_age を指定してください")
+    if current_income is None:
+        raise ValueError("current_income を指定してください")
+    
+    # income_multiplier列を計算（current_ageを開始年齢として使用）
+    df_with_multiplier = add_income_multiplier_columns(
+        df, rate_column=rate_column, add_cumsum=False, 
+        start_age=current_age, end_age=retirement_age
+    )
+    
+    # 現在年齢のmultiplierを取得
+    current_age_row = df_with_multiplier[df_with_multiplier['age'] == current_age]
+    if current_age_row.empty:
+        raise ValueError(f"指定された現在年齢 {current_age} がデータに存在しません")
+    
+    current_multiplier = current_age_row['income_multiplier'].iloc[0]
+    
+    if current_multiplier == 0:
+        raise ValueError(f"現在年齢 {current_age} はmultiplierが0です")
+    
+    # 基準年収を計算（開始年齢時点での年収）
+    base_income = current_income / current_multiplier
+    
+    # 各年齢での年収を計算し、合計
+    total_income = 0.0
+    for _, row in df_with_multiplier.iterrows():
+        annual_income = base_income * row['income_multiplier']
+        total_income += annual_income
+    
+    return total_income
 
 
 def create_age_income_dataframe_with_midpoint(

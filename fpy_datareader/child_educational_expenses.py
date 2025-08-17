@@ -1,4 +1,4 @@
-# fpy_datareader/gakushuuhi.py
+# fpy_datareader/child_educational_expenses.py
 """
 文部科学省 子供の学習費調査データの取得・処理モジュール
 
