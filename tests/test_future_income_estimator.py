@@ -1,12 +1,13 @@
 import pytest
 import pandas as pd
 import numpy as np
-from future_income_estimater import (
+from fpy_datareader.future_income_estimator import (
     extract_numbers,
     calculate_age_midpoint,
     add_age_midpoint_column,
     interpolate_age_income
 )
+
 
 
 class TestExtractNumbers:
@@ -82,14 +83,14 @@ class TestCalculateAgeMidpoint:
         assert calculate_age_midpoint("２５歳未満", method='discrete') == 22.0
     
     def test_custom_age_class_width(self):
-        """カスタム階級幅"""
-        assert calculate_age_midpoint("30歳未満", method='discrete', age_class_width=10) == 25.0  # (20+29)/2
-        assert calculate_age_midpoint("85歳以上", method='discrete', age_class_width=10) == 90.0  # (85+94)/2
-    
+        """カスタム階級幅のテスト"""
+        assert calculate_age_midpoint("30歳未満", method='discrete', age_class_width=10) == 24.5  # (20+29)/2
+        assert calculate_age_midpoint("85歳以上", method='discrete', age_class_width=10) == 89.5  # (85+94)/2
+        
     def test_age_class_with_explicit_width(self):
         """明示的な階級幅を含む年齢階級"""
         assert calculate_age_midpoint("30歳未満（5歳階級）", method='discrete') == 27.0
-        assert calculate_age_midpoint("85歳以上（10歳階級）", method='discrete') == 90.0
+        assert calculate_age_midpoint("85歳以上（10歳階級）", method='discrete') == 89.5
     
     def test_invalid_patterns(self):
         """無効なパターン"""
@@ -120,7 +121,7 @@ class TestAddAgeMidpointColumn:
         
         assert len(result) == 3
         assert list(result.columns) == ['age', 'income']
-        assert result['age'].tolist() == [27.5, 32.5, 37.5]  # continuous method default
+        assert result['age'].tolist() == [27.0, 32.0, 37.0]  # discrete method default
         assert result['income'].tolist() == [400000, 500000, 600000]
     
     def test_discrete_method(self):
@@ -128,6 +129,13 @@ class TestAddAgeMidpointColumn:
         result = add_age_midpoint_column(self.test_df, 'age_class', 'income', method='discrete')
         
         assert result['age'].tolist() == [27.0, 32.0, 37.0]
+        assert result['income'].tolist() == [400000, 500000, 600000]
+    
+    def test_continuous_method(self):
+        """連続的解釈のテスト"""
+        result = add_age_midpoint_column(self.test_df, 'age_class', 'income', method='continuous')
+        
+        assert result['age'].tolist() == [27.5, 32.5, 37.5]
         assert result['income'].tolist() == [400000, 500000, 600000]
     
     def test_custom_age_class_width(self):
@@ -140,7 +148,7 @@ class TestAddAgeMidpointColumn:
         result = add_age_midpoint_column(df_custom, 'age_class', 'income', 
                                        method='discrete', age_class_width=10)
         
-        assert result['age'].tolist() == [25.0, 90.0]  # (20+29)/2, (85+94)/2
+        assert result['age'].tolist() == [24.5, 89.5]  # (20+29)/2, (85+94)/2
         assert result['income'].tolist() == [300000, 200000]
     
     def test_with_none_values(self):
@@ -153,9 +161,9 @@ class TestAddAgeMidpointColumn:
         result = add_age_midpoint_column(df_with_none, 'age_class', 'income')
         
         assert len(result) == 3
-        assert result['age'].iloc[0] == 27.5
+        assert result['age'].iloc[0] == 27.0  # discrete method default
         assert pd.isna(result['age'].iloc[1])  # '平均'はNone
-        assert result['age'].iloc[2] == 37.5
+        assert result['age'].iloc[2] == 37.0
     
     def test_empty_dataframe(self):
         """空のDataFrameのテスト"""
