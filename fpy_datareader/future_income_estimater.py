@@ -1064,7 +1064,6 @@ def process_living_conditions_survey_data(
     age_income_df = create_age_income_dataframe_with_midpoint( # 年齢がfloatではないため補完が必要
         income_df["世帯主の年齢（１０歳階級）_102"],
         income_df["income"] * 10000,  # 万円を円に変換 (Convert from 10,000 yen to yen)
-        "世帯主の年齢（１０歳階級）_102"
     )
     
     # 補間処理（既存関数を活用）
