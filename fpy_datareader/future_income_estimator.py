@@ -238,7 +238,8 @@ def interpolate_age_income(
     - 線形補間では最も近い2点間の線分から値を計算
     - 3次スプライン補間では全体のデータから滑らかな曲線を作成
     - 成長率は前年からの変化率を浮動小数点数で表示（例：0.05 = 5%の成長）
-    - 最初の年齢の成長率はNaNとなる（前年データが存在しないため）
+    - 30歳の成長率は「(31歳の所得 - 30歳の所得) / 30歳の所得」で計算
+    - 最後の年齢の成長率はNaNとなる（翌年データが存在しないため）
     """
     
     # パラメータの制約チェック
@@ -365,9 +366,9 @@ def interpolate_age_income(
     
     return result_df
 
-def add_income_multiplier_columns(df, rate_column='growth_rate', add_cumsum=True, start_age=None, end_age=None):
+def add_income_multiplier_columns(df, rate_column='growth_rate', add_total_future_income=True, start_age=None, end_age=None, use_vectorized=True):
     """
-    データフレームにincome_multiplier列とその累積和列を追加する関数（開始・終了年齢指定可能）
+    データフレームにincome_multiplier列とその関連列を追加する関数（開始・終了年齢指定可能）
     
     Parameters:
     -----------
@@ -375,19 +376,144 @@ def add_income_multiplier_columns(df, rate_column='growth_rate', add_cumsum=True
         元のデータフレーム（age, income, growth_rate, growth_rate_ma列を含む）
     rate_column : str
         使用する成長率の列名 ('growth_rate' または 'growth_rate_ma')
-    add_cumsum : bool
-        累積和列を追加するかどうか (デフォルト: True)
+    add_total_future_income : bool
+        将来収入合計を追加するかどうか (デフォルト: True)
+        Trueの場合、各時点tから終了時点までのincome_multiplierの合計を計算し、
+        その後、income_multiplierで割って1を引いた値をtotal_future_income列として追加
     start_age : int or None
         開始年齢（この年齢を1とする）。Noneの場合は最初の年齢を使用
     end_age : int or None
         終了年齢（この年齢以降は0とする）。Noneの場合は制限なし
-        
+    use_vectorized : bool
+        ベクトル化版を使用するかどうか（デフォルト: True）
+        Falseの場合はfor文版を使用
+    
     Returns:
     --------
     pandas.DataFrame
-        income_multiplier列と（add_cumsum=Trueの場合）income_multiplier_cumsum列が追加されたデータフレーム
+        income_multiplier列と（add_total_future_income=Trueの場合）
+        income_multiplier_future_cumsum列とtotal_future_income列が追加されたデータフレーム
+
+        出力例: 
+        age   income        growth_rate   growth_rate_ma   income_multiplier   income_multiplier_future_cumsum   total_future_income
+        15    2058455.497   0.066666667   0.062663399      1.000000000         160.5030659                       159.5030659
+        16    2195685.864   0.062500000   0.062663399      1.062663399         159.5030659                       149.0974495
+        17    2332916.230   0.058823529   0.058959695      1.129253499         158.4404025                       139.3054342
+        18    2470146.597   0.055555556   0.061476279      1.195833941         157.3111490                       130.5493260
+        19    2607376.963   0.070049754   0.064292660      1.269349362         156.1153150                       121.9884535
+        ...   ...           ...           ...              ...                  ...                               ...
+        96    1573363.636  -0.052631579  -0.052729045      0.762377833           3.411131202                       3.474331564
+        97    1490555.024  -0.055555556  -0.055670221      0.722178378           2.648753369                       2.667727323
+        98    1407746.411  -0.058823529  -0.058959695      0.681974548           1.926574991                       1.824995444
+        99    1324937.799  -0.062500000  -0.060661765      0.641765537           1.244600443                       0.939338235
+        100   1242129.187                 -0.062500000     0.602834907           0.602834907   
+
+    Note:
+    -----
+    計算される列の数式とその意味:
+    
+    1. income_multiplier (時点tでの累積成長倍率):
+       数式: M_t = prod_{i=0}^{t-1} (1 + r_i)
+       意味: 開始時点から時点tまでの収入成長の累積倍率
+       
+    2. income_multiplier_future_cumsum (時点tから終了時点までの将来収入倍率合計):
+       数式: S_t = sum_{tau=t}^{T} M_{tau}
+       意味: 時点tから終了時点Tまでの各時点での収入倍率の合計
+       
+    3. total_future_income (時点tでの将来収入相対価値):
+       数式: F_t = frac{S_t}{M_t} - 1 = frac{sum_{tau=t}^{T} M_{tau}}{M_t} - 1
+       意味: 現在の収入を1とした場合の将来収入の相対的な追加価値
+             （現在から将来にかけて何倍の収入が追加で得られるか）
+    
+    ここで:
+    - r_i: 時点iでの成長率
+    - M_t: 時点tでの累積成長倍率
+    - T: 終了時点（最終年齢）
+    - t, τ: 時点インデックス
+
+    出力テーブルの使い方:
+        18歳の収入が1,000,000円のとき、98歳の収入を求めるには、
+        income_multiplier列の18歳の1.195833941 と98歳の0.681974548を用いて、
+        1,000,000 * 0.681974548 / 1.195833941 
+        で計算する。
+        18歳の将来収入を計算するには、total_future_incomeを用いて、
+        1,000,000 * 157.3111490
+        で計算する。
     """
     
+    if use_vectorized:
+        return _add_income_multiplier_vectorized(df, rate_column, add_total_future_income, start_age, end_age)
+    else:
+        return _add_income_multiplier_for_loop(df, rate_column, add_total_future_income, start_age, end_age)
+
+
+def _add_income_multiplier_vectorized(df, rate_column='growth_rate', add_total_future_income=True, start_age=None, end_age=None):
+    """
+    ベクトル化版：pandasの機能を最大限活用して高速化
+    """
+    # データフレームをコピーして元データを保持
+    result_df = df.copy()
+    
+    # 指定された列が存在するかチェック
+    if rate_column not in result_df.columns:
+        raise ValueError(f"指定された列 '{rate_column}' が見つかりません。利用可能な列: {list(result_df.columns)}")
+    
+    # 年齢でソートして確実に順序を保つ
+    result_df = result_df.sort_values('age').reset_index(drop=True)
+    
+    # 開始年齢の設定（指定がない場合は最初の年齢）
+    if start_age is None:
+        start_age = result_df['age'].iloc[0]
+    
+    # 開始年齢が存在するかチェック
+    if start_age not in result_df['age'].values:
+        raise ValueError(f"指定された開始年齢 {start_age} がデータに存在しません")
+    
+    if end_age is not None:
+        print(f"終了年齢: {end_age}歳（以降は0）")
+    
+    # income_multiplierを初期化（全て0）
+    result_df['income_multiplier'] = 0.0
+    
+    # 有効な年齢範囲のマスクを作成
+    valid_mask = (result_df['age'] >= start_age)
+    if end_age is not None:
+        valid_mask = valid_mask & (result_df['age'] <= end_age)
+    
+    # 有効な範囲のインデックスを取得
+    valid_indices = result_df[valid_mask].index
+    
+    if len(valid_indices) > 0:
+        # 開始位置を1に設定
+        start_idx = valid_indices[0]
+        result_df.loc[start_idx, 'income_multiplier'] = 1.0
+        
+        # 2番目の要素から累積積を計算
+        if len(valid_indices) > 1:
+            # 有効範囲の成長率を取得（1つ前の成長率を使用）
+            valid_data = result_df.loc[valid_indices].copy()
+            
+            # 前の行の成長率を取得（シフト操作）
+            growth_rates = valid_data[rate_column].shift(1)
+            growth_rates.iloc[0] = 0.0  # 開始時点は0（1倍）
+            
+            # NaN値を0に置換（前の値を維持するため、(1+0)=1で乗算）
+            growth_rates = growth_rates.fillna(0.0)
+            
+            # (1 + growth_rate)の累積積を計算
+            growth_factors = 1 + growth_rates
+            cumulative_multipliers = growth_factors.cumprod()
+            
+            # 結果を元のデータフレームに設定
+            result_df.loc[valid_indices, 'income_multiplier'] = cumulative_multipliers.values
+    
+    return _add_future_income_columns(result_df, add_total_future_income)
+
+
+def _add_income_multiplier_for_loop(df, rate_column='growth_rate', add_total_future_income=True, start_age=None, end_age=None):
+    """
+    For文版：元の実装（比較・デバッグ用）
+    """
     # データフレームをコピーして元データを保持
     result_df = df.copy()
     
@@ -412,7 +538,6 @@ def add_income_multiplier_columns(df, rate_column='growth_rate', add_cumsum=True
     # income_multiplier列を計算
     multipliers = []
     multiplier = 0.0  # 開始年齢以前は0
-    start_index = result_df[result_df['age'] == start_age].index[0]
     
     for i in range(len(result_df)):
         current_age = result_df['age'].iloc[i]
@@ -438,85 +563,27 @@ def add_income_multiplier_columns(df, rate_column='growth_rate', add_cumsum=True
     # 計算結果をデータフレームに追加
     result_df['income_multiplier'] = multipliers
     
-    # 累積和列を追加（オプション）
-    if add_cumsum:
-        result_df['income_multiplier_cumsum'] = result_df['income_multiplier'].cumsum()
+    return _add_future_income_columns(result_df, add_total_future_income)
+
+
+def _add_future_income_columns(result_df, add_total_future_income=True):
+    """
+    将来収入関連の列を追加する共通関数
+    """
+    if add_total_future_income:
+        # 各時点tから終了時点までのincome_multiplierの合計を計算
+        result_df['income_multiplier_future_cumsum'] = result_df['income_multiplier'][::-1].cumsum()[::-1]
+        
+        # ゼロ除算を避けるためのマスク
+        nonzero_mask = result_df['income_multiplier'] != 0
+        result_df['total_future_income'] = 0.0
+        result_df.loc[nonzero_mask, 'total_future_income'] = (
+            result_df.loc[nonzero_mask, 'income_multiplier_future_cumsum'] / 
+            result_df.loc[nonzero_mask, 'income_multiplier'] - 1
+        )
     
     return result_df
 
-def sum_income_multiplier(df):
-    """
-    income_multiplier列の合計を計算する関数
-    
-    Parameters:
-    -----------
-    df : pandas.DataFrame
-        income_multiplier列を含むデータフレーム
-        
-    Returns:
-    --------
-    float
-        income_multiplier列の合計値
-    """
-    if 'income_multiplier' not in df.columns:
-        raise ValueError("データフレームにincome_multiplier列が見つかりません")
-    
-    return df['income_multiplier'].sum()
-
-def calculate_lifetime_income(df, rate_column='growth_rate', current_age=None, current_income=None, retirement_age=None):
-    """
-    特定年齢・収入の人の生涯合計年収を計算する関数
-    
-    Parameters:
-    -----------
-    df : pandas.DataFrame
-        年齢別の成長率データを含むデータフレーム
-    rate_column : str
-        使用する成長率の列名 ('growth_rate' または 'growth_rate_ma')
-    current_age : int or None
-        現在の年齢
-    current_income : float or None
-        現在の年収
-    retirement_age : int or None
-        退職年齢（この年齢以降は収入0）。Noneの場合は制限なし
-        
-    Returns:
-    --------
-    float
-        生涯合計年収
-    """
-    
-    if current_age is None:
-        raise ValueError("current_age を指定してください")
-    if current_income is None:
-        raise ValueError("current_income を指定してください")
-    
-    # income_multiplier列を計算（current_ageを開始年齢として使用）
-    df_with_multiplier = add_income_multiplier_columns(
-        df, rate_column=rate_column, add_cumsum=False, 
-        start_age=current_age, end_age=retirement_age
-    )
-    
-    # 現在年齢のmultiplierを取得
-    current_age_row = df_with_multiplier[df_with_multiplier['age'] == current_age]
-    if current_age_row.empty:
-        raise ValueError(f"指定された現在年齢 {current_age} がデータに存在しません")
-    
-    current_multiplier = current_age_row['income_multiplier'].iloc[0]
-    
-    if current_multiplier == 0:
-        raise ValueError(f"現在年齢 {current_age} はmultiplierが0です")
-    
-    # 基準年収を計算（開始年齢時点での年収）
-    base_income = current_income / current_multiplier
-    
-    # 各年齢での年収を計算し、合計
-    total_income = 0.0
-    for _, row in df_with_multiplier.iterrows():
-        annual_income = base_income * row['income_multiplier']
-        total_income += annual_income
-    
-    return total_income
 
 
 def create_age_income_dataframe_with_midpoint(
